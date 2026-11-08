@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="A Mac companion for modding MacNativeGames. Import Switch mods, switch loadouts, and launch Breath of the Wild from one window.">
+<meta name="theme-color" content="#10171b">
+<title>MacNative Mods — Modding for MacNativeGames</title>
+<link rel="icon" href="mark.png" type="image/png">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<header class="bar wrap">
+  <a class="brand" href="index.html"><img width="29" height="29" src="mark.png" alt=""> MacNative Mods</a>
+  <nav aria-label="Main navigation">
+    <a href="#setup">Setup</a>
+    <a href="catalog.html">Mod catalog</a>
+    <a href="https://github.com/christianfurr/macnative-mods/releases/tag/v0.2.4" class="nav-download">Download</a>
+  </nav>
+</header>
+<main id="content">
+  <section class="hero wrap" aria-labelledby="intro">
+    <div class="hero-copy">
+      <p class="version"><span></span> 0.2.4 for Apple silicon</p>
+      <h1 id="intro">Your Switch mods, on Mac.</h1>
+      <p class="intro">Import Switch mods, build a loadout, and launch your MacNativeGames app from one window. Start with Breath of the Wild 1.6.0.</p>
+      <div class="actions">
+        <a class="button primary" href="https://github.com/christianfurr/macnative-mods/releases/tag/v0.2.4">Download for Mac <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10m-4-4 4 4 4-4M4 15v2h12v-2"/></svg></a>
+        <a class="button quiet" href="#demo"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 9 6-9 6z"/></svg> Watch the workflow</a>
+      </div>
+      <p class="requirements">macOS 26 or later, Python 3.14, and a compatible MacNativeGames checkout</p>
+    </div>
+    <figure class="preview">
+      <div class="window" aria-hidden="true">
+        <div class="window-title"><div class="dots"><i></i><i></i><i></i></div><span>MacNative Mods</span><svg viewBox="0 0 20 20"><rect x="3" y="4" width="14" height="12" rx="2"/><path d="M8 4v12"/></svg></div>
+        <div class="window-body">
+          <div class="window-sidebar">
+            <small>Games</small>
+            <div class="game-selected">Breath of the Wild <span>Switch 1.6.0</span></div>
+            <small class="profile-label">Profiles</small>
+            <div class="sidebar-item"><i></i> Clean game</div>
+            <div class="sidebar-item selected"><i></i> Linkle</div>
+            <div class="sidebar-item"><i></i> Custom gear</div>
+          </div>
+          <div class="window-content">
+            <div class="window-content-title"><strong>Breath of the Wild</strong><span>Linkle profile</span></div>
+            <div class="window-table" role="presentation">
+              <div class="window-table-head"><span>Mod</span><span>Status</span></div>
+              <div><span><i></i> Linkle 3.0.1</span><span class="on">Enabled</span></div>
+              <div><span><i></i> Tingle outfit</span><span class="on">Enabled</span></div>
+              <div><span><i></i> Moonlit Apples</span><span>Off</span></div>
+            </div>
+            <div class="merge-strip"><svg viewBox="0 0 20 20"><path d="M4 4h3l4 6m-7 6h3l4-6h5m-3-3 3 3-3 3"/></svg><span>Resource sizes merged</span></div>
+          </div>
+        </div>
+        <div class="window-footer"><span>2 mods enabled</span><strong><svg viewBox="0 0 20 20"><path d="m7 4 9 6-9 6z"/></svg> Apply &amp; Launch</strong></div>
+      </div>
+      <figcaption>Illustrated preview of a BOTW loadout.</figcaption>
+    </figure>
+  </section>
+
+  <div class="status-band">
+    <div class="wrap status-content">
+      <span class="pulse" aria-hidden="true"></span>
+      <p><strong>Gameplay tested</strong> on Switch BOTW 1.6.0 through MacNativeGames.</p>
+      <a href="catalog.html">See tested packs <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5"/></svg></a>
+    </div>
+  </div>
+
+  <section class="section wrap" id="setup" aria-labelledby="setup-title">
+    <div class="section-head"><h2 id="setup-title">Get a mod running.</h2><p>Start with a Switch mod for your installed game version. The catalog tells you which download and format were tested.</p></div>
+    <ol class="steps" role="list">
+      <li><h3>Connect your game</h3><p>Open MacNative Mods, pick your installed game, and point it to the supported MacNativeGames checkout if asked.</p></li>
+      <li><h3>Import a pack</h3><p>Choose a Switch RomFS folder or archive. For BOTW 1.6.0 BNPs, set up BCML and select the base pack and its add-ons together. For compatible BNPs, choose <strong>Open With → MacNative Mods</strong> in Finder to review the import.</p></li>
+      <li><h3>Apply and launch</h3><p>Enable the pack, quit the game if it is open, and select <strong>Apply &amp; Launch</strong>.</p></li>
+    </ol>
+    <a class="text-link" href="https://github.com/christianfurr/macnative-mods/blob/v0.2.4/docs/MODS.md">Read the full setup guide <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5"/></svg></a>
+  </section>
+
+  <section class="section feature-section" id="demo" aria-labelledby="demo-title">
+    <div class="wrap demo">
+      <div class="demo-copy"><h2 id="demo-title">From import<br>to play.</h2><p>See a pack go into a profile and the manager prepare it for launch.</p><a class="button quiet" href="demo.mp4">Watch the demo <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 9 6-9 6z"/></svg></a></div>
+      <div class="feature-list">
+        <article><h3>One library, several loadouts.</h3><p>Keep a clean setup and a modded one. Profiles remember enabled packs and load order and share your existing game saves.</p></article>
+        <article><h3>See what needs attention.</h3><p>Check required packs and shared files. For BOTW 1.6.0, Apply combines supported resource-size changes and keeps the previous overlay if a merge fails.</p></article>
+        <article><h3>Share the profile.</h3><p>Send the loadout and its order. The receiving Mac installs matching packs from their authors.</p></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section wrap" id="compatibility" aria-labelledby="support-title">
+    <div class="section-head"><h2 id="support-title">Know your game version.</h2><p>Gameplay evidence is tracked separately from file validation. Start with the verified version when trying the manager.</p></div>
+    <dl class="support">
+      <div><dt>Breath of the Wild</dt><dd>Switch 1.6.0 <span class="support-chip">Gameplay tested</span></dd></div>
+      <div><dt>Breath of the Wild</dt><dd>1.9.0 <span class="support-chip other">Overlay tests only</span></dd></div>
+      <div><dt>Tears of the Kingdom</dt><dd>1.0.0, 1.2.1, 1.4.3 <span class="support-chip other">Overlay tests only</span></dd></div>
+      <div><dt>Octopath Traveler 0</dt><dd>1.0.3, 1.0.4, 1.0.5 <span class="support-chip other">Overlay tests only</span></dd></div>
+    </dl>
+    <article class="case-note"><h3>A two-pack startup fix</h3><p>An outfit add-on replaced the shared resource-size table that Linkle needed. A merged table let both packs reach gameplay on a copied save. The app now performs that merge on Apply for BOTW 1.6.0.</p></article>
+    <p class="support-note">MacNative Mods is an independent companion for MacNativeGames. Bring your own installed game and download mods from their creators.</p>
+  </section>
+</main>
+<footer class="wrap footer">
+  <a class="brand" href="#content"><img width="24" height="24" src="mark.png" alt=""> MacNative Mods</a>
+  <a href="https://github.com/christianfurr/macnative-mods">Source on GitHub</a>
+  <a href="https://github.com/christianfurr/macnative-mods/issues">Report an issue</a>
+</footer>
+</body>
+</html>
