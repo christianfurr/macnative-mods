@@ -133,6 +133,7 @@ struct LaunchReport {
 }
 
 private enum ModsAction: Sendable {
+    case ootWaterFix
     case status, importPack(URL, FlamebladeStats?), toggle(String, Bool), move(String, ModDirection), remove(String), apply, demos
     case createProfile(String, copy: Bool), selectProfile(String), renameProfile(String), deleteProfile(String), launch(LaunchMode), setup
     case importBNP([URL], name: String)
@@ -148,6 +149,7 @@ private enum ModsAction: Sendable {
         case .remove(let id): return ["remove", id]
         case .apply: return ["apply"]
         case .demos: return ["demos"]
+        case .ootWaterFix: return ["oot-water-fix"]
         case .createProfile(let name, let copy): return ["profile-create"] + (copy ? ["--copy"] : []) + ["--", name]
         case .selectProfile(let name): return ["profile-select", "--", name]
         case .renameProfile(let name): return ["profile-rename", "--", name]
@@ -170,6 +172,7 @@ private enum ModsAction: Sendable {
         case .remove: return "Removing mod…"
         case .apply: return "Preparing mods for the next launch…"
         case .demos: return "Generating demo mods…"
+        case .ootWaterFix: return "Generating Water Temple Wall Fix…"
         case .createProfile, .selectProfile, .renameProfile, .deleteProfile: return "Updating profiles…"
         case .launch: return "Preparing the game…"
         case .setup: return "Checking setup…"
@@ -322,6 +325,7 @@ final class ModsModel: ObservableObject {
         else { perform(.importPack(url, stats)) }
     }
     func addDemos() { perform(.demos) }
+    func addOOTWaterFix() { perform(.ootWaterFix) }
     func importBNP(_ urls: [URL], name: String) { perform(.importBNP(urls, name: name)) }
     func exportProfile(_ url: URL) { perform(.exportProfile(url)) }
     func importProfile(_ url: URL) { perform(.importProfile(url)) }

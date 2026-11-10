@@ -44,9 +44,13 @@ For BOTW 1.6.0, choose **Add demo mods** to generate **Explore Menu** and **Moon
 
 ### Ocarina of Time
 
-Use a MacNativeGames build that bundles the game data. Select OoT, then use **Setup → Game tools folder…** to choose a checkout with the OoT mod tools at `ca3c4ad6`. This choice is separate from the checkout used by other games.
+Use a MacNativeGames OoT v131072 build. Both bundled game data and an external MacNativeGames game-data library are supported. Select OoT, then use **Setup → Game tools folder…** to choose a checkout with the OoT mod tools at `ca3c4ad6`. This choice is separate from the checkout used by other games.
 
 Import Switch 2 RomFS replacements for title ID `0400486024DEC000`. Choose **Import → Add Short Kokiri Intro demo** to generate the cutscene pack from your local app. Enable it, close the game, click **Apply & Launch**, then choose **New Game**. It shortens the bundled opening movie and event. The other opening scenes and the game’s progression still play. If you use the native `OOT_AUTO_SKIP_OPENING` test flag, turn off the demo pack to avoid loading the same replacements twice.
+
+Use **Import → Add Water Temple Wall Fix** to generate a replacement normal map from your own game image. You can also import the [PlayStation, Xbox, or Steam Deck button prompt packs](https://github.com/exgde/oot-switch2-button-prompts/releases/tag/v1.2) as ZIPs. Enable only one prompts pack because they replace the same files.
+
+Other Switch 2 packs that passed the manager's path validation include [Young Link's Gear](https://gamebanana.com/mods/738670), [1998 Hookshot](https://gamebanana.com/mods/738662), [Classic Link Voice](https://gamebanana.com/mods/738175), and [Restored Temple of Time Chants](https://gamebanana.com/mods/738678). Import them as downloaded. Check the game in a disposable save before combining new packs.
 
 The [OoT remake modding project](https://github.com/Kabosune/oot-remake-modding) publishes first-person, FPV drone, and mouse-grab code mods. Those use executable patches and need a separate native port.
 

@@ -21,7 +21,7 @@ sys.dont_write_bytecode = True
 from mod_environment import (
     ModError, manager_data, legacy_data, ensure_dir,
     game_running, installation, lock_file, native_game_running, overlay_signature,
-    present, regular, setup_status,
+    oot_romfs_image, present, regular, setup_status,
 )
 from mod_import import DESCRIPTION_FILE, REFUSALS, check_composition_paths, demos, import_mod, inspect_tree, read_description
 from mod_bcml import import_bnps
@@ -108,12 +108,12 @@ class Backend:
         }
 
     def configure_oot(self):
-        if not self.romfs_image.is_file():
-            raise ModError("Choose an OoT app built with its game data included.")
+        self.romfs_image = oot_romfs_image(self.install.app, self.install.romfs)
         script = self.install.repo / "games/oot/scripts/make_mod_manifest.py"
         spec = importlib.util.spec_from_file_location("oot_mod_manifest", script)
         self.oot_manifest = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.oot_manifest)
+        self.oot_manifest.IMAGE_DIR = self.romfs_image.parent
         self.oot_reserved = self.oot_manifest.app_overlays(self.install.app, self.version)
         # The player app mounts these two optional resources only in its test mode.
         for name in OOT_OPENING_FILES:
@@ -149,6 +149,31 @@ class Backend:
                 "Shortens the opening story scene in Kokiri Forest on a new game. "
                 "Uses the test cutscene bundled with your local MacNativeGames app. "
                 "Start New Game at the title screen; existing saves are unchanged.\n"
+            )
+            return import_mod(self, pack), {}
+
+    def add_oot_water_fix(self):
+        source = "Tex/Rock_WaterTemple_Gate_P_01_Nrm.bntx.zs"
+        target = "Tex/Rock_WaterTemple_Gate_M_01_Nrm.bntx.zs"
+        index = self.oot_manifest.read_index(self.install.romfs / "runtime-index.bin")
+        if source not in index or target not in index:
+            raise ModError("This OoT build is missing the expected Water Temple textures.")
+        offset, size = index[source]
+        if offset < 0 or not 0 < size <= 2 << 20 or offset + size > self.romfs_image.stat().st_size:
+            raise ModError("The stock Water Temple texture is outside the game image.")
+        with self.romfs_image.open("rb") as image:
+            image.seek(offset)
+            replacement = image.read(size)
+        if len(replacement) != size or not replacement.startswith(bytes.fromhex("28b52ffd")):
+            raise ModError("The Water Temple normal map is not a Zstandard resource.")
+        with tempfile.TemporaryDirectory(prefix="oot-water-", dir=self.root) as scratch:
+            pack = Path(scratch) / "Water Temple Wall Fix"
+            dest = pack / "romfs" / target
+            dest.parent.mkdir(parents=True)
+            dest.write_bytes(replacement)
+            (pack / "README.md").write_text(
+                "Replaces the Water Temple gate wall normal map with its companion texture. "
+                "Generated from your own installed OoT 131072 game data.\n"
             )
             return import_mod(self, pack), {}
 
@@ -530,6 +555,10 @@ class Backend:
                               fire_capacity=args.fire_capacity), {}
         if action == "import-bnp":
             return import_bnps(self, args.paths, args.name), {}
+        if action == "oot-water-fix":
+            if self.version != "oot":
+                raise ModError("The Water Temple fix requires Ocarina of Time 131072.")
+            return self.add_oot_water_fix()
         if action == "demos":
             if self.version == "oot":
                 return self.add_oot_demo()
@@ -583,7 +612,7 @@ def arguments(argv):
     parser.add_argument("--app", required=True, type=Path)
     parser.add_argument("--repo", type=Path)
     commands = parser.add_subparsers(dest="action", required=True, parser_class=JSONParser)
-    for action in ("status", "setup", "apply", "demos", "prepare-launch", "prepare-unmodded"):
+    for action in ("status", "setup", "apply", "demos", "oot-water-fix", "prepare-launch", "prepare-unmodded"):
         commands.add_parser(action)
     for action in ("profile-create", "profile-select", "profile-rename", "profile-delete"):
         profile = commands.add_parser(action)

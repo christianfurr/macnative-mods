@@ -148,6 +148,35 @@ def game_details(app):
         raise ModError("The selected game app could not be verified.") from error
 
 
+def oot_romfs_image(app, romfs):
+    bundled = romfs / "romfs.bin"
+    if bundled.is_file():
+        return bundled
+    config = romfs.parents[2] / "build/game-data/oot/romfs-config.txt"
+    try:
+        pins = dict(line.split(maxsplit=1) for line in config.read_text().splitlines() if line.strip())
+        size, digest = int(pins["ROMFS_IMAGE_SIZE"]), pins["ROMFS_IMAGE_SHA256"].lower()
+        info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
+        chosen = subprocess.run(
+            ["/usr/bin/defaults", "read", "org.macnativegames.oot", "MNGGameDataFolder.oot"],
+            capture_output=True, text=True, timeout=5,
+        ).stdout.strip()
+        folders = (chosen, info.get("MNGGameDataFolder"),
+                   str(Path.home() / "Library/Application Support/MacNativeGames" / OOT_FOLDER / "GameData"))
+        for folder in folders:
+            if not isinstance(folder, str) or not Path(folder).is_absolute():
+                continue
+            for directory in (Path(folder) / "oot", Path(folder)):
+                image = directory / "romfs.bin"
+                mark = directory / "romfs.sha256"
+                if image.is_file() and image.stat().st_size == size and (
+                        not mark.exists() or mark.read_text().strip().lower() == digest):
+                    return image
+    except (OSError, ValueError, KeyError, subprocess.TimeoutExpired) as error:
+        raise ModError("The external OoT RomFS could not be verified.") from error
+    raise ModError("Open OoT once and locate its game data folder, then refresh the mod library.")
+
+
 def tools_checkout(info, repo, oot=False):
     try:
         if repo is None:
@@ -185,7 +214,9 @@ def setup_status(app, repo):
     info = {}
     version = None
     try:
-        _, info, game, version, display, _, _ = game_details(app)
+        app, info, game, version, display, romfs, _ = game_details(app)
+        if version == "oot":
+            oot_romfs_image(app, romfs)
         game_check = {"ready": True, "detail": f"{game.name} {display} is ready."}
     except ModError as error:
         game_check = {"ready": False, "detail": str(error)}

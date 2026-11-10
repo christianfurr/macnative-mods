@@ -109,6 +109,9 @@ struct ModsView: View {
                 if model.status?.canMakeDemos == true {
                     Divider()
                     Button(model.target.isOcarina ? "Add Short Kokiri Intro demo" : "Add demo mods") { model.addDemos() }
+                    if model.target.isOcarina {
+                        Button("Add Water Temple Wall Fix") { model.addOOTWaterFix() }
+                    }
                 }
             } label: {
                 Label("Import", systemImage: "tray.and.arrow.down")
