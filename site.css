@@ -229,15 +229,7 @@ a:focus-visible {
     background: repeating-linear-gradient(130deg,transparent 0 13px,rgba(165,244,216,.04) 13px 14px);
 }
 
-.preview a,.workflow-screenshot a {
-    position: relative;
-    display: block;
-}
-
 .app-screenshot {
-    display: block;
-    width: 100%;
-    height: auto;
     border: 1px solid #466060;
     border-radius: 12px;
     box-shadow: 0 24px 65px #0005;
