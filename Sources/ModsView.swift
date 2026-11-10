@@ -93,8 +93,8 @@ struct ModsView: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(model.target.name).font(.system(size: 25, weight: .semibold))
-                Text(model.selectedProfile.isEmpty ? "Switch \(model.target.version)"
-                     : "\(model.selectedProfile)  ·  Switch \(model.target.version)")
+                Text(model.selectedProfile.isEmpty ? model.target.versionLabel
+                     : "\(model.selectedProfile)  ·  \(model.target.versionLabel)")
                     .font(.system(size: 12)).foregroundStyle(ModTint.muted)
             }
             Spacer()
@@ -108,7 +108,7 @@ struct ModsView: View {
                 }
                 if model.status?.canMakeDemos == true {
                     Divider()
-                    Button("Add demo mods") { model.addDemos() }
+                    Button(model.target.isOcarina ? "Add Short Kokiri Intro demo" : "Add demo mods") { model.addDemos() }
                 }
             } label: {
                 Label("Import", systemImage: "tray.and.arrow.down")

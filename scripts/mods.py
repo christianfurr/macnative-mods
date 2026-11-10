@@ -30,6 +30,10 @@ import mod_rstb
 
 
 LIBRARY_MARKER = ".botw-editor-library-v1"
+OOT_OPENING_FILES = (
+    "Event/EventFlow/Dm_Kokiri_0000.bfevfl.zs",
+    "Event/Movie/Dm_Kokiri_0000.webm",
+)
 MOD_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,79}\Z")
 VALIDATION = {
     "no_romfs": "No RomFS data.",
@@ -63,12 +67,17 @@ class Backend:
         mod_library.TITLE_IDS[self.version] = self.game.title_id
         self.load = install.game_data / "mods" / self.version
         self.slot = install.game_data / "game-slot/lock"
+        if self.version == "oot":
+            self.slot = install.game_data.parent / "TOTK/game-slot/lock"
         self.root = manager_data() / "mod-library" / self.version
         self.library = None
         self.ot_manifest = None
+        self.oot_manifest = None
         self.romfs_image = install.romfs / "romfs.bin"
         if self.game.data_folder == "OT0":
             self.configure_octopath()
+        elif self.version == "oot":
+            self.configure_oot()
         else:
             manifest.IMAGE_DIR = None
             if not (install.romfs / "romfs.bin").is_file():
@@ -97,6 +106,51 @@ class Backend:
             name.split("/", 1)[0]
             for name in self.ot_manifest.read_index(self.install.romfs / "runtime-index.bin")
         }
+
+    def configure_oot(self):
+        if not self.romfs_image.is_file():
+            raise ModError("Choose an OoT app built with its game data included.")
+        script = self.install.repo / "games/oot/scripts/make_mod_manifest.py"
+        spec = importlib.util.spec_from_file_location("oot_mod_manifest", script)
+        self.oot_manifest = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.oot_manifest)
+        self.oot_reserved = self.oot_manifest.app_overlays(self.install.app, self.version)
+        # The player app mounts these two optional resources only in its test mode.
+        for name in OOT_OPENING_FILES:
+            self.oot_reserved.pop(name, None)
+
+        def validate(repo, app, version, mod):
+            found = self.oot_manifest.manifest(mod / "romfs", self.install.romfs,
+                                               app_replaced=self.oot_reserved)
+            replaced = len(found.lines) - len(found.added)
+            reason = ("misspelt" if found.misspelt else "all_taken" if found.taken
+                      else "" if replaced else "only_adds")
+            return self.tools.Validation(not reason, reason, replaced, len(found.added),
+                                         taken=tuple(found.taken),
+                                         misspelt=tuple(name for name, _ in found.misspelt))
+
+        self.tools.validate = validate
+        self.tools.top_folders = lambda *_: {
+            name.split("/", 1)[0]
+            for name in self.oot_manifest.read_index(self.install.romfs / "runtime-index.bin")
+        }
+
+    def add_oot_demo(self):
+        with tempfile.TemporaryDirectory(prefix="oot-demo-", dir=self.root) as scratch:
+            pack = Path(scratch) / "Short Kokiri Intro"
+            for name in OOT_OPENING_FILES:
+                source = self.install.romfs.parent / "romfs-patches" / name
+                if not present(source) or not regular(source):
+                    raise ModError("This OoT app is missing the bundled opening test resources.")
+                dest = pack / "romfs" / name
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, dest)
+            (pack / "README.md").write_text(
+                "Shortens the opening story scene in Kokiri Forest on a new game. "
+                "Uses the test cutscene bundled with your local MacNativeGames app. "
+                "Start New Game at the title screen; existing saves are unchanged.\n"
+            )
+            return import_mod(self, pack), {}
 
     def migrate_legacy_library(self):
         old = legacy_data() / "mod-library" / self.version
@@ -225,7 +279,7 @@ class Backend:
         return {
             "ok": ok, "message": message, "version": self.install.display_version,
             "game_name": self.game.name,
-            "can_make_demos": self.version == "botw160",
+            "can_make_demos": self.version in ("botw160", "oot"),
             "game_running": game_running(self.slot, self.game), "pending": self.pending(overlay, count, tables),
             "profiles": list(library.state["profiles"]), "selected_profile": library.state["selected_profile"],
             "applied_files": count, "applied_profile": applied_profile, "blocked_reason": blocked,
@@ -429,6 +483,14 @@ class Backend:
         return message, {"backup": backup.name} if backup is not None else {}
 
     def stage_overlay(self, source, staged):
+        if self.oot_manifest:
+            romfs = source / "romfs"
+            found = self.oot_manifest.manifest(romfs, self.install.romfs, app_replaced=self.oot_reserved)
+            if found.misspelt or found.taken or not found.lines:
+                raise ModError("The selected mods did not produce a valid OoT overlay.")
+            (romfs / "manifest.tsv").write_text(self.oot_manifest.manifest_text(found))
+            romfs.rename(staged)
+            return
         if self.ot_manifest:
             romfs = source / "romfs"
             lines, _, _, misspelt = self.ot_manifest.manifest(romfs, self.install.romfs)
@@ -469,6 +531,8 @@ class Backend:
         if action == "import-bnp":
             return import_bnps(self, args.paths, args.name), {}
         if action == "demos":
+            if self.version == "oot":
+                return self.add_oot_demo()
             if self.version != "botw160":
                 raise ModError("The demos are for Breath of the Wild 1.6.0.")
             return demos(self), {}

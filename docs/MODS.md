@@ -5,6 +5,7 @@ MacNative Mods manages Switch RomFS mods in a separate macOS app. It uses Apple 
 | Game | Versions | Verification |
 | --- | --- | --- |
 | Breath of the Wild | 1.6.0, 1.9.0 | 1.6.0 used with the installed game. Both versions passed synthetic overlay tests. |
+| Ocarina of Time (Switch 2) | 1.1.1 (131072) | Short Kokiri Intro verified against the installed native build. |
 | Tears of the Kingdom | 1.0.0, 1.2.1, 1.4.3 | Synthetic import, manifest, apply, backup and disable tests. |
 | Octopath Traveler 0 | 1.0.3, 1.0.4, 1.0.5 | Synthetic import, manifest, apply, backup and disable tests. |
 
@@ -40,6 +41,14 @@ The inspector reports whether a required pack is missing, disabled, or incompati
 To include a description, put a UTF-8 `README.md` or `README.txt` beside the pack's `romfs` folder. The first paragraph under the title appears in the mod details pane.
 
 For BOTW 1.6.0, choose **Add demo mods** to generate **Explore Menu** and **Moonlit Apples** from your own installed game. Explore Menu changes the US English title screen's **Continue** label to **Explore!**. Moonlit Apples recolors the Apple icon in the game's Materials pouch. The source contains the generator. The resulting files stay in the private mod library.
+
+### Ocarina of Time
+
+Use a MacNativeGames build that bundles the game data. Select OoT, then use **Setup → Game tools folder…** to choose a checkout with the OoT mod tools at `ca3c4ad6`. This choice is separate from the checkout used by other games.
+
+Import Switch 2 RomFS replacements for title ID `0400486024DEC000`. Choose **Import → Add Short Kokiri Intro demo** to generate the cutscene pack from your local app. Enable it, close the game, click **Apply & Launch**, then choose **New Game**. It shortens the bundled opening movie and event. The other opening scenes and the game’s progression still play. If you use the native `OOT_AUTO_SKIP_OPENING` test flag, turn off the demo pack to avoid loading the same replacements twice.
+
+The [OoT remake modding project](https://github.com/Kabosune/oot-remake-modding) publishes first-person, FPV drone, and mouse-grab code mods. Those use executable patches and need a separate native port.
 
 ## Custom weapon models
 

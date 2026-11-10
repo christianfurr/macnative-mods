@@ -10,6 +10,8 @@ struct ModTarget: Hashable, Identifiable, Sendable {
     let version: String
 
     var id: URL { url }
+    var isOcarina: Bool { bundleID == "org.macnativegames.oot" }
+    var versionLabel: String { isOcarina ? "Switch 2 · \(version)" : "Switch \(version)" }
 
     init?(_ url: URL) {
         let path = url.standardizedFileURL.resolvingSymlinksInPath()
@@ -19,6 +21,7 @@ struct ModTarget: Hashable, Identifiable, Sendable {
         case "org.macnativegames.botw": (name, dataFolder) = ("Breath of the Wild", "BotW")
         case "org.macnativegames.totk": (name, dataFolder) = ("Tears of the Kingdom", "TOTK")
         case "org.macnativegames.ot0": (name, dataFolder) = ("Octopath Traveler 0", "OT0")
+        case "org.macnativegames.oot": (name, dataFolder) = ("Ocarina of Time", "OcarinaOfTime")
         default: return nil
         }
         self.url = path
@@ -38,6 +41,7 @@ struct MacNativeModsApp: App {
 
 private struct ModManagerWindow: View {
     @AppStorage("checkout") private var checkout = ""
+    @AppStorage("ootCheckout") private var ootCheckout = ""
     @AppStorage("selectedGame") private var selectedPath = ""
     @AppStorage("addedGames") private var addedGames = ""
     @AppStorage("seenSetup") private var seenSetup = false
@@ -120,6 +124,7 @@ private struct ModManagerWindow: View {
             openLibrary()
         }
         .onChange(of: checkout) { openLibrary() }
+        .onChange(of: ootCheckout) { openLibrary() }
         .onOpenURL(perform: openBNP)
         .sheet(isPresented: $showSetup, onDismiss: { seenSetup = true }) {
             ModsSetupView(model: model, chooseGame: chooseGame, chooseCheckout: chooseCheckout) {
@@ -130,7 +135,7 @@ private struct ModManagerWindow: View {
         .alert("Choose a supported game", isPresented: $selectionError) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("Select a MacNativeGames build of Breath of the Wild, Tears of the Kingdom, or Octopath Traveler 0.")
+            Text("Select a MacNativeGames build of Breath of the Wild, Tears of the Kingdom, Ocarina of Time, or Octopath Traveler 0.")
         }
         .alert("Breath of the Wild 1.6.0 required", isPresented: $needsBNPGame) {
             Button("OK", role: .cancel) {}
@@ -152,7 +157,9 @@ private struct ModManagerWindow: View {
     }
 
     private func openLibrary() {
-        model = games.first(where: { $0.id == selection }).map { ModsModel(target: $0, checkout: checkout) }
+        model = games.first(where: { $0.id == selection }).map {
+            ModsModel(target: $0, checkout: $0.isOcarina ? ootCheckout : checkout)
+        }
     }
 
     private func scan() {
@@ -188,7 +195,9 @@ private struct ModManagerWindow: View {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.prompt = "Choose Folder"
-        if panel.runModal() == .OK, let url = panel.url { checkout = url.path }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        if model?.target.isOcarina == true { ootCheckout = url.path }
+        else { checkout = url.path }
     }
 }
 

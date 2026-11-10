@@ -14,6 +14,8 @@ import sys
 
 PINNED_COMMIT = "b1a49a26650eb31a986e7841f449bb44446c5208"
 SUPPORTED_CHECKOUTS = {PINNED_COMMIT, "9fe3fdc1d08ce5e1a64d120f257d79cc2dc7c0ca"}
+OOT_CHECKOUT = "ca3c4ad664591b87a6b5fc2d37c374743b5eb501"
+OOT_FOLDER = "OcarinaOfTime"
 
 @dataclass(frozen=True)
 class Game:
@@ -37,6 +39,10 @@ GAMES = {
     "org.macnativegames.ot0": Game(
         "Octopath Traveler 0", "OT0", "01005270232F2000", "game", "ot0-native",
         {"1.0.3": "v103", "1.0.4": "v104", "1.0.5": "v105"},
+    ),
+    "org.macnativegames.oot": Game(
+        "Ocarina of Time", OOT_FOLDER, "0400486024DEC000", "totk", "OcarinaOfTime",
+        {"131072": "oot"},
     ),
 }
 
@@ -98,15 +104,23 @@ def legacy_repo():
     return None
 
 
-def verify_checkout(repo):
+def verify_checkout(repo, oot=False):
     git = subprocess.run(["/usr/bin/git", "-C", str(repo), "rev-parse", "HEAD"],
                          capture_output=True, text=True, timeout=10)
-    if git.returncode or git.stdout.strip() not in SUPPORTED_CHECKOUTS:
+    if git.returncode or (not oot and git.stdout.strip() not in SUPPORTED_CHECKOUTS):
         raise ModError("Choose a supported MacNativeGames checkout at b1a49a2 or 9fe3fdc.")
     tools = ("tools/builder", "tools/__init__.py", "games/totk/scripts",
              "games/ot0/scripts/make_mod_manifest.py")
+    if oot:
+        tools = ("tools/builder", "tools/__init__.py", "games/totk/scripts",
+                 "games/oot/scripts/make_mod_manifest.py")
+        unchanged = subprocess.run(["/usr/bin/git", "--no-optional-locks", "-C", str(repo),
+                                    "diff", "--quiet", OOT_CHECKOUT, "HEAD", "--", *tools],
+                                   capture_output=True, timeout=30)
+        if unchanged.returncode:
+            raise ModError("Choose the MacNativeGames OoT helper checkout at ca3c4ad6 or one with the same tools.")
     status = subprocess.run(["/usr/bin/git", "--no-optional-locks", "-C", str(repo), "status", "--porcelain",
-                             "--untracked-files=all", "--", *tools], capture_output=True, timeout=10)
+                             "--untracked-files=all", "--", *tools], capture_output=True, timeout=30 if oot else 10)
     if status.returncode or status.stdout:
         raise ModError("Restore the original MacNativeGames mod tools in the selected checkout.")
 
@@ -125,7 +139,7 @@ def game_details(app):
         versions = {item.name for item in extracted.iterdir() if item.is_dir()} - {"firmware"}
         romfs = extracted / version / "romfs"
         runtime_name = f"{game.runtime}-{version}" if game.resources == "game" else game.runtime
-        runtime = resources / "build" / runtime_name
+        runtime = (app / "Contents/MacOS" if version == "oot" else resources / "build") / runtime_name
         if (versions != {version} or not regular(romfs / "runtime-index.bin") or not regular(runtime)
                 or (game.resources == "game" and info.get("OT0Version") != version)):
             raise ModError("The app's game files do not match its advertised version.")
@@ -134,7 +148,7 @@ def game_details(app):
         raise ModError("The selected game app could not be verified.") from error
 
 
-def tools_checkout(info, repo):
+def tools_checkout(info, repo, oot=False):
     try:
         if repo is None:
             stamped = info.get("MNGSourceRepo")
@@ -142,16 +156,17 @@ def tools_checkout(info, repo):
                 candidate = Path(stamped)
                 if candidate.is_absolute() and candidate.is_dir():
                     try:
-                        verify_checkout(candidate)
+                        verify_checkout(candidate, oot)
                     except ModError:
                         pass
                     else:
                         repo = candidate
-            repo = repo or legacy_repo()
+            if not oot:
+                repo = repo or legacy_repo()
         if repo is None:
             raise ModError("Choose your MacNativeGames checkout to use its RomFS tools.")
         repo = repo.expanduser().resolve(strict=True)
-        verify_checkout(repo)
+        verify_checkout(repo, oot)
         return repo
     except (OSError, ValueError, subprocess.TimeoutExpired) as error:
         raise ModError("The selected MacNativeGames checkout could not be verified.") from error
@@ -159,7 +174,7 @@ def tools_checkout(info, repo):
 
 def installation(app, repo=None):
     app, info, game, version, display, romfs, runtime = game_details(app)
-    repo = tools_checkout(info, repo)
+    repo = tools_checkout(info, repo, version == "oot")
     try:
         return Installation(repo, app, game, version, display, romfs, digest(runtime))
     except OSError as error:
@@ -168,13 +183,14 @@ def installation(app, repo=None):
 
 def setup_status(app, repo):
     info = {}
+    version = None
     try:
-        _, info, game, _, display, _, _ = game_details(app)
+        _, info, game, version, display, _, _ = game_details(app)
         game_check = {"ready": True, "detail": f"{game.name} {display} is ready."}
     except ModError as error:
         game_check = {"ready": False, "detail": str(error)}
     try:
-        tools_checkout(info, repo)
+        tools_checkout(info, repo, version == "oot")
         tools_check = {"ready": True, "detail": "A compatible checkout was found."}
     except ModError as error:
         tools_check = {"ready": False, "detail": str(error)}
