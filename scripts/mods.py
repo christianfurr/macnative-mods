@@ -21,7 +21,7 @@ sys.dont_write_bytecode = True
 from mod_environment import (
     ModError, manager_data, legacy_data, ensure_dir,
     game_running, installation, lock_file, native_game_running, overlay_signature,
-    present, regular,
+    present, regular, setup_status,
 )
 from mod_import import DESCRIPTION_FILE, REFUSALS, check_composition_paths, demos, import_mod, inspect_tree, read_description
 from mod_bcml import import_bnps
@@ -225,6 +225,7 @@ class Backend:
             "game_running": game_running(self.slot, self.game), "pending": self.pending(overlay, count, tables),
             "profiles": list(library.state["profiles"]), "selected_profile": library.state["selected_profile"],
             "applied_files": count, "blocked_reason": self.blocked(),
+            "backup": self.latest_backup(),
             "dependency_blocker": self.dependency_blocker(mods, requirements),
             "merged_paths": [mod_rstb.RESOURCE.as_posix()] if tables else [],
             "mods": [
@@ -288,7 +289,18 @@ class Backend:
             raise
         return "Removed from the library. A local recovery copy is kept."
 
-    def apply(self):
+    def latest_backup(self):
+        if not self.load.parent.is_dir() or self.load.parent.is_symlink():
+            return None
+        pattern = re.compile(re.escape(self.version) + r"\.backup-(\d{8}-\d{6})(?:-(\d+))?\Z")
+        candidates = []
+        for folder in self.load.parent.iterdir():
+            match = pattern.fullmatch(folder.name)
+            if match and folder.is_dir() and not folder.is_symlink() and regular(folder / "manifest.tsv"):
+                candidates.append((match[1], int(match[2] or 1), folder.name))
+        return max(candidates)[2] if candidates else None
+
+    def with_closed_game(self, operation):
         ensure_dir(self.load.parent)
         ensure_dir(self.slot.parent)
         try:
@@ -297,9 +309,34 @@ class Backend:
                     raise ModError(f"Quit {self.game.name} before applying mods.")
                 if blocked := self.blocked():
                     raise ModError(blocked)
-                return self.apply_locked()
+                return operation()
         except BlockingIOError as error:
             raise ModError(f"Quit {self.game.name} before applying mods.") from error
+
+    def apply(self):
+        return self.with_closed_game(self.apply_locked)
+
+    def recover(self, expected_backup=None):
+        # Use the same lock and overlay location as Apply. The profile stays untouched.
+        source = None
+        if expected_backup is not None:
+            if self.latest_backup() != expected_backup:
+                raise ModError("The previous overlay changed. Review recovery options and try again.")
+            source = self.load.with_name(expected_backup)
+        previous = None
+        if present(self.load):
+            previous = self.folder.backup_name(self.load)
+            self.load.rename(previous)
+        try:
+            if source is not None:
+                source.rename(self.load)
+        except OSError:
+            if previous is not None:
+                previous.rename(self.load)
+            raise
+        if source is not None:
+            return "Previous overlay restored for this launch.", {}
+        return "Ready to launch without mods.", {}
 
     def apply_locked(self):
         library = self.library
@@ -404,6 +441,10 @@ class Backend:
             return demos(self), {}
         if action == "apply":
             return self.apply()
+        if action == "prepare-unmodded":
+            return self.with_closed_game(self.recover)
+        if action == "restore-overlay":
+            return self.with_closed_game(lambda: self.recover(args.backup))
         if action == "prepare-launch":
             if reason := self.dependency_blocker():
                 raise ModError(reason)
@@ -445,7 +486,7 @@ def arguments(argv):
     parser.add_argument("--app", required=True, type=Path)
     parser.add_argument("--repo", type=Path)
     commands = parser.add_subparsers(dest="action", required=True, parser_class=JSONParser)
-    for action in ("status", "apply", "demos", "prepare-launch"):
+    for action in ("status", "setup", "apply", "demos", "prepare-launch", "prepare-unmodded"):
         commands.add_parser(action)
     for action in ("profile-create", "profile-select", "profile-rename", "profile-delete"):
         profile = commands.add_parser(action)
@@ -473,10 +514,13 @@ def arguments(argv):
     reorder.add_argument("anchor")
     reorder.add_argument("side", choices=("before", "after"))
     commands.add_parser("remove").add_argument("id")
+    commands.add_parser("restore-overlay").add_argument("backup")
     return parser.parse_args(argv)
 
 
 def execute(args):
+    if args.action == "setup":
+        return setup_status(args.app, args.repo)
     backend = Backend(installation(args.app, args.repo))
     ensure_dir(backend.root.parent)
     try:

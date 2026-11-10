@@ -40,12 +40,14 @@ private struct ModManagerWindow: View {
     @AppStorage("checkout") private var checkout = ""
     @AppStorage("selectedGame") private var selectedPath = ""
     @AppStorage("addedGames") private var addedGames = ""
+    @AppStorage("seenSetup") private var seenSetup = false
     @State private var games: [ModTarget] = []
     @State private var selection: URL?
     @State private var model: ModsModel?
     @State private var selectionError = false
     @State private var openedBNPs: [URL] = []
     @State private var needsBNPGame = false
+    @State private var showSetup = false
 
     var body: some View {
         NavigationSplitView {
@@ -86,8 +88,7 @@ private struct ModManagerWindow: View {
                 VStack(alignment: .leading, spacing: 7) {
                     Divider()
                     Button("Add Game…", systemImage: "plus") { chooseGame() }
-                    Button("Game tools folder…", systemImage: "gearshape") { chooseCheckout() }
-                        .help(checkout.isEmpty ? "Choose your MacNativeGames checkout folder." : checkout)
+                    Button("Setup…", systemImage: "gearshape") { showSetup = true }
                 }
                 .buttonStyle(.plain)
                 .font(.system(size: 12))
@@ -99,19 +100,33 @@ private struct ModManagerWindow: View {
             if let model {
                 ModsView(model: model, openedBNPs: $openedBNPs).id(ObjectIdentifier(model))
             } else {
-                ContentUnavailableView("Select a game", systemImage: "shippingbox",
-                                       description: Text("Add a MacNativeGames app to manage its RomFS mods."))
+                ContentUnavailableView {
+                    Label("Add a game", systemImage: "gamecontroller")
+                } description: {
+                    Text("Choose an installed MacNativeGames app to get started.")
+                } actions: {
+                    Button("Add Game…", action: chooseGame).buttonStyle(.borderedProminent)
+                }
             }
         }
         .frame(minWidth: 940, minHeight: 545)
         .preferredColorScheme(.dark)
-        .task { scan() }
+        .task {
+            scan()
+            if !seenSetup { showSetup = true }
+        }
         .onChange(of: selection, initial: true) { _, url in
             if let url { selectedPath = url.path }
             openLibrary()
         }
         .onChange(of: checkout) { openLibrary() }
         .onOpenURL(perform: openBNP)
+        .sheet(isPresented: $showSetup, onDismiss: { seenSetup = true }) {
+            ModsSetupView(model: model, chooseGame: chooseGame, chooseCheckout: chooseCheckout) {
+                model?.refresh(keepMessage: true)
+            }
+            .id(model.map(ObjectIdentifier.init))
+        }
         .alert("Choose a supported game", isPresented: $selectionError) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -174,5 +189,95 @@ private struct ModManagerWindow: View {
         panel.canChooseDirectories = true
         panel.prompt = "Choose Folder"
         if panel.runModal() == .OK, let url = panel.url { checkout = url.path }
+    }
+}
+
+private struct ModsSetupView: View {
+    let model: ModsModel?
+    let chooseGame: () -> Void
+    let chooseCheckout: () -> Void
+    let refreshLibrary: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var game: SetupCheck?
+    @State private var tools: SetupCheck?
+    @State private var python: SetupCheck?
+    @State private var hasPython = false
+    @State private var checking = false
+    @State private var checkID = UUID()
+
+    private var ready: Bool { !checking && python?.ready == true && game?.ready == true && tools?.ready == true }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 15) {
+            Text("Set up MacNative Mods").font(.title2.bold())
+            Text("Check what this Mac needs to manage mods for your selected game.")
+                .foregroundStyle(.secondary)
+            Divider()
+            checkRow("Python 3.14", ready: python?.ready ?? hasPython,
+                     detail: python?.detail ?? (hasPython ? "Python was found." : "Install Python 3.14, then check again.")) {
+                if !(python?.ready ?? hasPython) {
+                    Link("Install Python", destination: URL(string: "https://formulae.brew.sh/formula/python@3.14")!)
+                }
+            }
+            checkRow("Game build", ready: game?.ready == true,
+                     detail: game?.detail ?? model.map { "\($0.target.name) \($0.target.version). \(checking ? "Checking…" : "Waiting for Python.")" }
+                        ?? "Select an installed MacNativeGames app.") {
+                Button("Add Game…", action: chooseGame)
+            }
+            checkRow("MacNativeGames tools", ready: tools?.ready == true,
+                     detail: tools?.detail ?? "Select a game and install Python to verify the tools.") {
+                Button("Game tools folder…", action: chooseCheckout)
+            }
+            Divider()
+            HStack {
+                Button("Check Again") { checkID = UUID() }.disabled(checking)
+                if checking { ProgressView().controlSize(.small) }
+                Spacer()
+                Button(ready ? "Continue" : "Close") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+        .frame(width: 510)
+        .task(id: checkID) {
+            await check()
+            if !Task.isCancelled { refreshLibrary() }
+        }
+    }
+
+    private func checkRow<Actions: View>(_ title: String, ready: Bool, detail: String,
+                                        @ViewBuilder actions: () -> Actions) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: ready ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(ready ? Color.green : Color.secondary)
+                .accessibilityLabel(ready ? "Ready" : "Needs checking")
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.headline)
+                Text(detail).font(.callout).foregroundStyle(.secondary)
+            }
+            Spacer()
+            actions().fixedSize()
+        }
+    }
+
+    private func check() async {
+        hasPython = ModsModel.hasPython
+        python = nil
+        game = nil
+        tools = nil
+        checking = hasPython && model != nil
+        guard checking, let model else { return }
+        do {
+            let result = try await model.checkSetup()
+            guard !Task.isCancelled else { return }
+            python = result.setupPython
+            game = result.setupGame
+            tools = result.setupTools ?? SetupCheck(ready: false, detail: result.message)
+        } catch {
+            guard !Task.isCancelled else { return }
+            tools = SetupCheck(ready: false, detail: error.localizedDescription)
+        }
+        checking = false
     }
 }

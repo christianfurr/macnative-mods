@@ -43,10 +43,12 @@ Start with **Breath of the Wild 1.6.0** for the best-tested setup. Mod compatibi
 On an Apple silicon Mac with Xcode command-line tools and Python 3, run:
 
 ```sh
-python3 -B scripts/test_mod_rstb.py
+python3 -B -m unittest discover -s scripts -p 'test_mod_*.py'
 bash scripts/build-mod-manager.sh
 ```
 
 The app, ZIP, and checksum appear under `build/`.
+
+For a notarized distribution build, set `MACNATIVE_MODS_DEVELOPER_ID` to the full **Developer ID Application** signing identity and `MACNATIVE_MODS_NOTARY_PROFILE` to a configured `notarytool` keychain profile before running the build script. It signs, submits, staples, and checks the app with Gatekeeper before packaging the ZIP. [Apple’s notarization guide](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution)
 
 MacNative Mods is an independent, MIT-licensed companion. It uses the existing MacNativeGames RomFS loader and your local game installation. [License](LICENSE) · [Third-party notices](THIRD_PARTY_NOTICES.md)

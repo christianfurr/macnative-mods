@@ -20,6 +20,11 @@ struct ManagedMod: Decodable, Identifiable, Sendable {
     }
 }
 
+struct SetupCheck: Decodable, Sendable {
+    let ready: Bool
+    let detail: String
+}
+
 struct ModsReport: Decodable, Sendable {
     let ok: Bool
     let message: String
@@ -35,6 +40,9 @@ struct ModsReport: Decodable, Sendable {
     let selectedProfile: String?
     let dependencyBlocker: String?
     let mergedPaths: [String]?
+    let setupPython: SetupCheck?
+    let setupGame: SetupCheck?
+    let setupTools: SetupCheck?
 
     enum CodingKeys: String, CodingKey {
         case ok, message, version, pending, backup, mods, profiles
@@ -45,6 +53,9 @@ struct ModsReport: Decodable, Sendable {
         case gameRunning = "game_running"
         case appliedFiles = "applied_files"
         case blockedReason = "blocked_reason"
+        case setupPython = "setup_python"
+        case setupGame = "setup_game"
+        case setupTools = "setup_tools"
     }
 }
 
@@ -64,9 +75,64 @@ struct FlamebladeStats: Sendable {
     }
 }
 
+enum LaunchMode: Sendable {
+    case profile
+    case unmodded
+    case restore(String)
+
+    var arguments: [String] {
+        switch self {
+        case .profile: ["prepare-launch"]
+        case .unmodded: ["prepare-unmodded"]
+        case .restore(let backup): ["restore-overlay", backup]
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .profile: "Selected profile"
+        case .unmodded: "Without mods"
+        case .restore: "Previous overlay"
+        }
+    }
+}
+
+struct LaunchReport {
+    let mode: LaunchMode
+    let game: String
+    let profile: String
+    let enabled: [String]
+    let preparedFiles: Int?
+    let result: String
+
+    var text: String {
+        let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
+        let names = enabled.enumerated().map { "\($0.offset + 1). \(Self.safeLine($0.element))" }
+        let order = names.isEmpty ? "None" : names.joined(separator: "\n")
+        let files = preparedFiles.map(String.init) ?? "Unavailable"
+        return """
+        MacNative Mods \(appVersion) · macOS \(ProcessInfo.processInfo.operatingSystemVersionString)
+        Game: \(Self.safeLine(game))
+        Launch mode: \(mode.description)
+        Selected profile: \(Self.safeLine(profile))
+        Prepared overlay files: \(files)
+        Result: \(Self.safeLine(result))
+
+        Enabled in selected profile (load order)
+        \(order)
+        """
+    }
+
+    private static func safeLine(_ value: String) -> String {
+        value.components(separatedBy: .controlCharacters).joined(separator: " ")
+            .replacingOccurrences(of: #"(?:[/\\]|%2[fF]|%5[cC]).*$"#,
+                                  with: " [path omitted]", options: .regularExpression)
+    }
+}
+
 private enum ModsAction: Sendable {
     case status, importPack(URL, FlamebladeStats?), toggle(String, Bool), move(String, ModDirection), remove(String), apply, demos
-    case createProfile(String, copy: Bool), selectProfile(String), renameProfile(String), deleteProfile(String), launch
+    case createProfile(String, copy: Bool), selectProfile(String), renameProfile(String), deleteProfile(String), launch(LaunchMode), setup
     case importBNP([URL], name: String)
     case exportProfile(URL), importProfile(URL)
     case moveTo(String, anchor: String, after: Bool)
@@ -84,7 +150,8 @@ private enum ModsAction: Sendable {
         case .selectProfile(let name): return ["profile-select", "--", name]
         case .renameProfile(let name): return ["profile-rename", "--", name]
         case .deleteProfile(let name): return ["profile-delete", "--", name]
-        case .launch: return ["prepare-launch"]
+        case .launch(let mode): return mode.arguments
+        case .setup: return ["setup"]
         case .importBNP(let urls, let name):
             return ["import-bnp"] + (name.isEmpty ? [] : ["--name=\(name)"]) + ["--"] + urls.map(\.path)
         case .exportProfile(let url): return ["profile-export", "--", url.path]
@@ -103,6 +170,7 @@ private enum ModsAction: Sendable {
         case .demos: return "Generating demo mods…"
         case .createProfile, .selectProfile, .renameProfile, .deleteProfile: return "Updating profiles…"
         case .launch: return "Preparing the game…"
+        case .setup: return "Checking setup…"
         case .importBNP: return "Merging Switch BNP packs with BCML…"
         case .exportProfile: return "Exporting profile…"
         case .importProfile: return "Matching profile mods…"
@@ -130,6 +198,7 @@ private struct ModsExecution: Sendable {
 
 private enum ModsTool {
     static let pythonPaths = ["/opt/homebrew/bin/python3.14", "/usr/local/bin/python3.14"]
+    static var interpreter: String? { pythonPaths.first(where: FileManager.default.isExecutableFile(atPath:)) }
     static let responseLimit = 8 * 1024 * 1024
 
     static func execute(_ action: ModsAction, helper: URL?, target: ModTarget, checkout: String) throws -> ModsExecution {
@@ -140,10 +209,10 @@ private enum ModsTool {
         return ModsExecution(reply: reply, snapshot: status?.mods == nil ? nil : status)
     }
 
-    private static func invoke(_ action: ModsAction, helper: URL?, target: ModTarget, checkout: String) throws -> ModsReport {
+    static func invoke(_ action: ModsAction, helper: URL?, target: ModTarget, checkout: String) throws -> ModsReport {
         let files = FileManager.default
         guard let helper, files.isReadableFile(atPath: helper.path) else { throw ModsToolError.missingHelper }
-        guard let interpreter = pythonPaths.first(where: files.isExecutableFile(atPath:)) else { throw ModsToolError.missingPython }
+        guard let interpreter else { throw ModsToolError.missingPython }
 
         let selectedURLs: [URL]
         switch action {
@@ -196,6 +265,7 @@ final class ModsModel: ObservableObject {
     @Published private(set) var failed = false
     @Published private(set) var current = false
     @Published private(set) var backupURL: URL?
+    @Published private(set) var launchReport: LaunchReport?
 
     let target: ModTarget
     private let checkout: String
@@ -226,6 +296,16 @@ final class ModsModel: ObservableObject {
         canEdit && status?.pending == true && status?.gameRunning == false && blocker == nil
     }
     var canLaunch: Bool { canEdit && status?.gameRunning == false && blocker == nil }
+    var canRecover: Bool { canEdit && status?.gameRunning == false && status?.blockedReason == nil }
+
+    static var hasPython: Bool { ModsTool.interpreter != nil }
+
+    func checkSetup() async throws -> ModsReport {
+        let target = target, checkout = checkout, helper = helper
+        return try await Task.detached(priority: .userInitiated) {
+            try ModsTool.invoke(.setup, helper: helper, target: target, checkout: checkout)
+        }.value
+    }
 
     func refresh(keepMessage: Bool = false) { perform(.status, keepMessage: keepMessage) }
     func importPack(_ url: URL, stats: FlamebladeStats? = nil) {
@@ -240,9 +320,13 @@ final class ModsModel: ObservableObject {
     func selectProfile(_ name: String) { perform(.selectProfile(name)) }
     func renameProfile(_ name: String) { perform(.renameProfile(name)) }
     func deleteSelectedProfile() { perform(.deleteProfile(selectedProfile)) }
-    func launch() {
-        guard canLaunch else { return }
-        perform(.launch)
+    func launch(_ mode: LaunchMode = .profile) {
+        switch mode {
+        case .profile: guard canLaunch else { return }
+        case .unmodded: guard canRecover else { return }
+        case .restore(let backup): guard canRecover, backupURL?.lastPathComponent == backup else { return }
+        }
+        perform(.launch(mode))
     }
     func toggle(_ mod: ManagedMod, enabled: Bool) {
         guard canEdit, mod.valid || !enabled else { return }
@@ -283,14 +367,16 @@ final class ModsModel: ObservableObject {
             switch result {
             case .success(let execution):
                 accept(execution, action: action, keepMessage: keepMessage)
-                if case .launch = action, execution.reply.ok, current {
-                    await openGame()
+                if case .launch(let mode) = action {
+                    if execution.reply.ok, current { await openGame() }
+                    recordLaunch(mode, preparedFiles: execution.reply.appliedFiles)
                     queuedRefresh = true
                 }
             case .failure(let error):
                 current = false
                 failed = true
                 message = error.localizedDescription
+                if case .launch(let mode) = action { recordLaunch(mode) }
             }
             activity = nil
             if let (url, stats) = queuedImport {
@@ -308,19 +394,32 @@ final class ModsModel: ObservableObject {
         do {
             let app = try await NSWorkspace.shared.openApplication(at: target.url,
                                                                    configuration: NSWorkspace.OpenConfiguration())
+            for _ in 0..<20 {
+                if app.isTerminated { break }
+                try? await Task.sleep(for: .milliseconds(250))
+            }
             failed = app.isTerminated
-            message = failed ? "\(target.name) exited during launch." : "Opened \(target.name)."
+            message = failed ? "\(target.name) exited during the startup check." : "Opened \(target.name)."
         } catch {
+            let failure = error as NSError
             failed = true
-            message = "Could not open \(target.name). \(error.localizedDescription)"
+            message = "Could not open \(target.name) (\(failure.domain) \(failure.code))."
         }
+    }
+
+    private func recordLaunch(_ mode: LaunchMode, preparedFiles: Int? = nil) {
+        launchReport = LaunchReport(mode: mode, game: "\(target.name) \(target.version)", profile: selectedProfile,
+                                    enabled: mods.filter(\.enabled).map(\.name), preparedFiles: preparedFiles,
+                                    result: message ?? "No launch result.")
     }
 
     private func accept(_ execution: ModsExecution, action: ModsAction, keepMessage: Bool) {
         current = execution.snapshot != nil
-        if let snapshot = execution.snapshot { status = snapshot }
-        if let backup = execution.reply.backup ?? execution.snapshot?.backup {
-            backupURL = backupLocation(backup)
+        if let snapshot = execution.snapshot {
+            status = snapshot
+            backupURL = snapshot.backup.flatMap(backupLocation)
+        } else {
+            backupURL = nil
         }
         if !execution.reply.ok {
             failed = true

@@ -3,14 +3,24 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD="$ROOT/build"
-APP="$BUILD/manager/MacNative Mods.app"
+DEVELOPER_ID="${MACNATIVE_MODS_DEVELOPER_ID:-}"
+NOTARY_PROFILE="${MACNATIVE_MODS_NOTARY_PROFILE:-}"
 if [[ "$(uname -s)" != Darwin || "$(uname -m)" != arm64 ]]; then
     printf 'MacNative Mods requires Apple silicon.\n' >&2
     exit 1
 fi
+if [[ -n "$DEVELOPER_ID" || -n "$NOTARY_PROFILE" ]]; then
+    if [[ "$DEVELOPER_ID" != "Developer ID Application: "* || -z "$NOTARY_PROFILE" ]]; then
+        printf 'Release builds require a Developer ID Application identity and a notarytool keychain profile.\n' >&2
+        exit 1
+    fi
+fi
+STAGING="$(mktemp -d /private/tmp/macnative-mods-build.XXXXXXXX)"
+trap 'rm -rf "$STAGING"' EXIT
+APP="$STAGING/MacNative Mods.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/Mods"
-xcrun swift "$ROOT/scripts/generate-mods-icon.swift" "$BUILD/MacNativeMods.iconset"
-/usr/bin/iconutil -c icns "$BUILD/MacNativeMods.iconset" -o "$APP/Contents/Resources/MacNativeMods.icns"
+xcrun swift "$ROOT/scripts/generate-mods-icon.swift" "$STAGING/MacNativeMods.iconset"
+/usr/bin/iconutil -c icns "$STAGING/MacNativeMods.iconset" -o "$APP/Contents/Resources/MacNativeMods.icns"
 xcrun swiftc -O -warnings-as-errors -target arm64-apple-macosx26.0 \
     "$ROOT/Sources/MacNativeMods.swift" "$ROOT/Sources/ModsModel.swift" "$ROOT/Sources/ModsView.swift" \
     -o "$APP/Contents/MacOS/MacNativeMods" -framework SwiftUI -framework AppKit
@@ -27,8 +37,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>CFBundleExecutable</key><string>MacNativeMods</string>
 <key>CFBundleIconFile</key><string>MacNativeMods</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.2.4</string>
-<key>CFBundleVersion</key><string>9</string>
+<key>CFBundleShortVersionString</key><string>0.2.5</string>
+<key>CFBundleVersion</key><string>10</string>
 <key>LSMinimumSystemVersion</key><string>26.0</string>
 <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
 <key>CFBundleDocumentTypes</key>
@@ -58,19 +68,27 @@ PLIST
 
 /usr/bin/xattr -dr com.apple.FinderInfo "$APP" 2>/dev/null || true
 /usr/bin/xattr -dr com.apple.ResourceFork "$APP" 2>/dev/null || true
-/usr/bin/codesign --force --sign - "$APP"
+if [[ -n "$DEVELOPER_ID" ]]; then
+    /usr/bin/codesign --force --options runtime --timestamp --sign "$DEVELOPER_ID" "$APP"
+else
+    /usr/bin/codesign --force --sign - "$APP"
+fi
 /usr/bin/codesign --verify --strict "$APP"
 
-python3 - "$APP" "$BUILD/MacNative.Mods.zip" <<'PY'
-import sys
-import zipfile
-from pathlib import Path
-
-app, archive = map(Path, sys.argv[1:])
-with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as output:
-    for file in sorted(app.rglob("*")):
-        if file.is_file():
-            output.write(file, file.relative_to(app.parent))
-PY
+ARCHIVE="$STAGING/MacNative.Mods.zip"
+/usr/bin/ditto -c -k --keepParent "$APP" "$ARCHIVE"
+if [[ -n "$DEVELOPER_ID" ]]; then
+    xcrun notarytool submit "$ARCHIVE" --keychain-profile "$NOTARY_PROFILE" --wait
+    xcrun stapler staple "$APP"
+    xcrun stapler validate "$APP"
+    /usr/sbin/spctl --assess --type execute --verbose "$APP"
+    rm "$ARCHIVE"
+    /usr/bin/ditto -c -k --keepParent "$APP" "$ARCHIVE"
+fi
+OUTPUT_APP="$BUILD/manager/MacNative Mods.app"
+mkdir -p "$BUILD/manager"
+rm -rf "$OUTPUT_APP"
+/usr/bin/ditto "$APP" "$OUTPUT_APP"
+mv "$ARCHIVE" "$BUILD/MacNative.Mods.zip"
 (cd "$BUILD" && /usr/bin/shasum -a 256 MacNative.Mods.zip > MacNative.Mods.zip.sha256)
-printf 'App: %s\nArchive: %s\n' "$APP" "$BUILD/MacNative.Mods.zip"
+printf 'App: %s\nArchive: %s\n' "$OUTPUT_APP" "$BUILD/MacNative.Mods.zip"

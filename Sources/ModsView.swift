@@ -13,6 +13,8 @@ struct ModsView: View {
     @State private var libraryFilter: LibraryFilter = .all
     @State private var bnpBatch: BNPBatch?
     @State private var showShortcuts = false
+    @State private var showLaunchReport = false
+    @State private var restoreBackup: String?
     @State private var dragScope = UUID()
     @State private var dropLine: ModDropLine?
     @AppStorage("showModInspector") private var showInspector = true
@@ -63,7 +65,7 @@ struct ModsView: View {
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didTerminateApplicationNotification)) { refreshGameState($0) }
         .alert(item: $removal) { mod in
             Alert(title: Text("Remove \(mod.name)?"),
-                  message: Text("Remove the editor’s imported copy. Apply to prepare the updated mod set for the next launch."),
+                  message: Text("Remove the imported copy. Apply to prepare the updated mod set for the next launch."),
                   primaryButton: .destructive(Text("Remove copy")) { model.remove(mod) },
                   secondaryButton: .cancel())
         }
@@ -74,6 +76,16 @@ struct ModsView: View {
         }
         .sheet(item: $bnpBatch) { batch in
             BNPImportSheet(packs: batch.packs) { model.importBNP($0, name: $1) }
+        }
+        .sheet(isPresented: $showLaunchReport) {
+            if let report = model.launchReport { LaunchReportView(report: report) }
+        }
+        .confirmationDialog("Restore the previous overlay and launch?", isPresented: Binding(
+            get: { restoreBackup != nil }, set: { if !$0 { restoreBackup = nil } }
+        ), titleVisibility: .visible, presenting: restoreBackup) { backup in
+            Button("Restore & Launch") { model.launch(.restore(backup)) }
+        } message: { _ in
+            Text("The current overlay is backed up. Your selected profile and its load order stay intact.")
         }
     }
 
@@ -480,10 +492,23 @@ struct ModsView: View {
                 }
             }
             Spacer(minLength: 0)
-            if let backup = model.backupURL {
-                Button("Show backup") { NSWorkspace.shared.activateFileViewerSelecting([backup]) }
-                    .buttonStyle(.bordered).help("Reveal the previous overlay in Finder")
+            Menu {
+                Button("Launch without mods") { model.launch(.unmodded) }.disabled(!model.canRecover)
+                if let backup = model.backupURL {
+                    Button("Restore previous overlay & launch…") { restoreBackup = backup.lastPathComponent }
+                        .disabled(!model.canRecover)
+                    Button("Show previous overlay in Finder") {
+                        NSWorkspace.shared.activateFileViewerSelecting([backup])
+                    }
+                }
+                Divider()
+                Button("Copy launch report…") { showLaunchReport = true }.disabled(model.launchReport == nil)
+            } label: {
+                Image(systemName: "ellipsis.circle")
             }
+            .fixedSize()
+            .help("Recovery and launch report")
+            .accessibilityLabel("Recovery and launch report")
             Button("Apply") { model.apply() }
                 .buttonStyle(.bordered).disabled(!model.canApply)
                 .help(model.blocker ?? "Prepare the enabled mods for the next game launch")
@@ -559,6 +584,38 @@ struct ModsView: View {
         guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
               app.bundleIdentifier == model.target.bundleID else { return }
         model.refresh(keepMessage: true)
+    }
+}
+
+private struct LaunchReportView: View {
+    let report: LaunchReport
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Launch report").font(.title2.bold())
+            Text("Review this report before sharing it. It includes your profile and mod names.")
+                .foregroundStyle(.secondary)
+            ScrollView {
+                Text(report.text).font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+            }
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+            HStack {
+                Spacer()
+                Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Copy Launch Report") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(report.text, forType: .string)
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+        .frame(width: 570, height: 345)
     }
 }
 

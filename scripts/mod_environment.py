@@ -10,6 +10,7 @@ from pathlib import Path
 import plistlib
 import stat
 import subprocess
+import sys
 
 PINNED_COMMIT = "b1a49a26650eb31a986e7841f449bb44446c5208"
 SUPPORTED_CHECKOUTS = {PINNED_COMMIT, "9fe3fdc1d08ce5e1a64d120f257d79cc2dc7c0ca"}
@@ -110,7 +111,7 @@ def verify_checkout(repo):
         raise ModError("Restore the original MacNativeGames mod tools in the selected checkout.")
 
 
-def installation(app, repo=None):
+def game_details(app):
     try:
         app = app.expanduser().resolve(strict=True)
         info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
@@ -128,6 +129,13 @@ def installation(app, repo=None):
         if (versions != {version} or not regular(romfs / "runtime-index.bin") or not regular(runtime)
                 or (game.resources == "game" and info.get("OT0Version") != version)):
             raise ModError("The app's game files do not match its advertised version.")
+        return app, info, game, version, display, romfs, runtime
+    except (OSError, TypeError, ValueError, AttributeError, plistlib.InvalidFileException) as error:
+        raise ModError("The selected game app could not be verified.") from error
+
+
+def tools_checkout(info, repo):
+    try:
         if repo is None:
             stamped = info.get("MNGSourceRepo")
             if isinstance(stamped, str):
@@ -144,9 +152,39 @@ def installation(app, repo=None):
             raise ModError("Choose your MacNativeGames checkout to use its RomFS tools.")
         repo = repo.expanduser().resolve(strict=True)
         verify_checkout(repo)
+        return repo
+    except (OSError, ValueError, subprocess.TimeoutExpired) as error:
+        raise ModError("The selected MacNativeGames checkout could not be verified.") from error
+
+
+def installation(app, repo=None):
+    app, info, game, version, display, romfs, runtime = game_details(app)
+    repo = tools_checkout(info, repo)
+    try:
         return Installation(repo, app, game, version, display, romfs, digest(runtime))
-    except (OSError, TypeError, ValueError, AttributeError, plistlib.InvalidFileException, subprocess.TimeoutExpired) as error:
-        raise ModError("The selected game app or MacNativeGames checkout could not be verified.") from error
+    except OSError as error:
+        raise ModError("The selected game runtime could not be read.") from error
+
+
+def setup_status(app, repo):
+    info = {}
+    try:
+        _, info, game, _, display, _, _ = game_details(app)
+        game_check = {"ready": True, "detail": f"{game.name} {display} is ready."}
+    except ModError as error:
+        game_check = {"ready": False, "detail": str(error)}
+    try:
+        tools_checkout(info, repo)
+        tools_check = {"ready": True, "detail": "A compatible checkout was found."}
+    except ModError as error:
+        tools_check = {"ready": False, "detail": str(error)}
+    python_ready = sys.version_info[:2] == (3, 14)
+    python_check = {
+        "ready": python_ready,
+        "detail": "Python 3.14 is ready." if python_ready else "The selected Python executable is not version 3.14.",
+    }
+    return {"ok": True, "message": "Setup checked.", "setup_python": python_check,
+            "setup_game": game_check, "setup_tools": tools_check}
 
 
 def ensure_dir(path):
