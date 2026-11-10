@@ -485,10 +485,12 @@ struct ModsView: View {
                 }
                 if !model.busy, let blocker = model.blocker, blocker != model.message {
                     Text(blocker).font(.system(size: 11)).foregroundStyle(ModTint.gold).lineLimit(3)
-                } else if !model.busy, !model.failed, model.message == nil, model.current {
-                    let enabled = model.mods.filter(\.enabled).count
-                    Text("\(enabled) of \(model.mods.count) mods enabled")
-                        .font(.system(size: 11)).foregroundStyle(ModTint.muted)
+                }
+                if model.current {
+                    HStack(spacing: 10) {
+                        profileStatus("Selected", model.selectedProfile)
+                        profileStatus("Applied", model.appliedProfileLabel)
+                    }
                 }
             }
             Spacer(minLength: 0)
@@ -518,6 +520,14 @@ struct ModsView: View {
         .padding(.horizontal, 12).padding(.vertical, 10)
         .background(ModTint.panel, in: RoundedRectangle(cornerRadius: 8))
         .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(ModTint.line).allowsHitTesting(false) }
+    }
+
+    private func profileStatus(_ label: String, _ profile: String) -> some View {
+        Text("\(Text(label + ": ").foregroundStyle(ModTint.muted))\(Text(profile).fontWeight(.medium))")
+            .font(.system(size: 11))
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .help("\(label): \(profile)")
     }
 
     private var statusTitle: String {

@@ -10,7 +10,7 @@ MacNative Mods manages Switch RomFS mods in a separate macOS app. It uses Apple 
 
 Each game version gets its own library. On first opening BOTW 1.6.0, MacNative Mods copies the library from the former editor tab and preserves its enabled order.
 
-Download [MacNative Mods 0.2.4](https://github.com/christianfurr/macnative-mods/releases/tag/v0.2.4) or build it with `bash scripts/build-mod-manager.sh`. The app is ad hoc signed. For a downloaded copy, use the standard [macOS Open Anyway flow](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac) if macOS requests it.
+Download [MacNative Mods 0.2.5](https://github.com/christianfurr/macnative-mods/releases/tag/v0.2.5) or build it with `bash scripts/build-mod-manager.sh`. The app is ad hoc signed. For a downloaded copy, use the standard [macOS Open Anyway flow](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac) if macOS requests it.
 
 ## Import and apply
 
@@ -23,7 +23,7 @@ Drag a mod’s grip to the upper or lower half of another row to place it before
 
 ## Profiles
 
-Version 0.2.0 starts with a **Default** profile containing your existing selections and order. The profile menu lets you create an empty loadout, duplicate the current loadout, rename it, or delete it. The library of imported packs is shared across profiles for the same game version. Each profile remembers its own switches and order. Profile changes apply on the next launch after you choose **Apply & Launch** or **Apply**. An empty profile prepares the game with mods disabled. Game saves are shared across profiles.
+Version 0.2.0 starts with a **Default** profile containing your existing selections and order. The profile menu lets you create an empty loadout, duplicate the current loadout, rename it, or delete it. The library of imported packs is shared across profiles for the same game version. Each profile remembers its own switches and order. Profile changes apply on the next launch after you choose **Apply & Launch** or **Apply**. The launch bar shows the selected profile and the profile used to prepare the current overlay. An overlay from an older release or an external tool may show as **Untracked overlay** until you click **Apply**. An empty profile prepares the game with mods disabled. Game saves are shared across profiles.
 
 Use **Export current profile…** in the profile menu to create a `.macnativeprofile` file. It contains the game version and the enabled packs in order, identified by name and content fingerprint. To use **Import profile…** on another Mac, first import the matching packs into the same game version's library. The manager lists any missing or different packs and keeps your existing profile selected until the import succeeds.
 

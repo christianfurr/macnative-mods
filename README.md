@@ -2,7 +2,7 @@
 
 A standalone Mac app for managing mods on supported [MacNativeGames](https://github.com/ly05010419/MacNativeGames) builds. Import your mods, set the load order, and launch the game with the profile you picked.
 
-**[Download 0.2.4 beta](https://github.com/christianfurr/macnative-mods/releases/tag/v0.2.4)** · [Watch the 30-second demo](https://christianfurr.github.io/macnative-mods/#demo) · [Browse tested mods](https://christianfurr.github.io/macnative-mods/catalog.html)
+**[Download 0.2.5 beta](https://github.com/christianfurr/macnative-mods/releases/tag/v0.2.5)** · [Watch the 30-second demo](https://christianfurr.github.io/macnative-mods/#demo) · [Browse tested mods](https://christianfurr.github.io/macnative-mods/catalog.html)
 
 Apple silicon · macOS 26 or later · Python 3.14 · A compatible MacNativeGames game and helper checkout
 
@@ -18,7 +18,7 @@ If you use Homebrew and need Python 3.14, run `brew install python@3.14`. [Homeb
 
 ## What you can do
 
-- **Switch loadouts.** Keep separate profiles for different playthroughs or mod combinations. Each remembers which mods are enabled and their order. Share a `.macnativeprofile` file with someone who already has the matching packs.
+- **Switch loadouts.** Keep separate profiles for different playthroughs or mod combinations. Each remembers which mods are enabled and their order. The launch bar shows the selected profile and the one currently applied. Share a `.macnativeprofile` file with someone who already has the matching packs.
 - **See which mod wins.** Drag mods to reorder them and check **Needs Attention** for dependency or compatibility issues. When two enabled mods replace the same file, the later mod generally wins. BOTW 1.6.0 resource-size tables merge where compatible.
 - **Import Switch mod packs.** Use complete base-game RomFS packs or merged Switch exports from BCML and UKMM. BOTW 1.6.0 can also merge compatible Switch BNP packs after you install the [optional BCML runtime](docs/MODS.md#bcml-and-ukmm). The guide covers format limits, including Wii U packs, DLC-title overlays, and ExeFS patches.
 

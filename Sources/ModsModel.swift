@@ -33,6 +33,7 @@ struct ModsReport: Decodable, Sendable {
     let gameRunning: Bool?
     let pending: Bool?
     let appliedFiles: Int?
+    let appliedProfile: String?
     let backup: String?
     let blockedReason: String?
     let mods: [ManagedMod]?
@@ -52,6 +53,7 @@ struct ModsReport: Decodable, Sendable {
         case canMakeDemos = "can_make_demos"
         case gameRunning = "game_running"
         case appliedFiles = "applied_files"
+        case appliedProfile = "applied_profile"
         case blockedReason = "blocked_reason"
         case setupPython = "setup_python"
         case setupGame = "setup_game"
@@ -282,6 +284,11 @@ final class ModsModel: ObservableObject {
     var mods: [ManagedMod] { status?.mods ?? [] }
     var profiles: [String] { status?.profiles ?? [] }
     var selectedProfile: String { status?.selectedProfile ?? "" }
+    var appliedProfileLabel: String {
+        if status?.blockedReason != nil { return "Unverified overlay" }
+        if let name = status?.appliedProfile { return name }
+        return (status?.appliedFiles ?? 0) > 0 ? "Untracked overlay" : "No mods"
+    }
     var mergedPaths: Set<String> { Set(status?.mergedPaths ?? []) }
     var busy: Bool { activity != nil }
     var canEdit: Bool { current && !busy }
@@ -293,7 +300,9 @@ final class ModsModel: ObservableObject {
         return nil
     }
     var canApply: Bool {
-        canEdit && status?.pending == true && status?.gameRunning == false && blocker == nil
+        let hasDifferentOverlay = (status?.appliedFiles ?? 0) > 0 && status?.appliedProfile != selectedProfile
+        return canEdit && (status?.pending == true || hasDifferentOverlay)
+            && status?.gameRunning == false && blocker == nil
     }
     var canLaunch: Bool { canEdit && status?.gameRunning == false && blocker == nil }
     var canRecover: Bool { canEdit && status?.gameRunning == false && status?.blockedReason == nil }

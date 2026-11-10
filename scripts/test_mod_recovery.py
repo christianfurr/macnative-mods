@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from mod_environment import ModError
+from mod_environment import ModError, overlay_signature
 from mods import Backend
 
 
@@ -41,6 +41,20 @@ class Recovery(unittest.TestCase):
                 self.backend.with_closed_game(self.backend.recover)
         self.assertTrue(self.backend.load.is_dir())
         self.assertIsNone(self.backend.latest_backup())
+
+    def test_same_second_recovery_keeps_the_most_recent_overlay_first(self):
+        previous = self.backend.load.with_name("botw160.backup-20261109-200000-3")
+        previous.mkdir()
+        (previous / "manifest.tsv").write_text("old\n")
+        signature, _ = overlay_signature(self.backend.load)
+        self.backend.library.state["overlay_profiles"] = {signature: "Default"}
+
+        self.backend.recover()
+        latest = self.backend.latest_backup()
+        self.assertEqual(latest, "botw160.backup-20261109-200000-4")
+        self.backend.recover(latest)
+        restored, _ = overlay_signature(self.backend.load)
+        self.assertEqual(self.backend.profile_for_overlay(restored), "Default")
 
     def test_restore_rolls_back_if_previous_overlay_cannot_be_moved(self):
         backup = self.backend.load.with_name("botw160.backup-20261108-200000")

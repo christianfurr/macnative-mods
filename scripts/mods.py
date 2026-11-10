@@ -148,6 +148,8 @@ class Backend:
         state = self.library.state
         state.setdefault("profiles", {"Default": {"order": [], "enabled": []}})
         state.setdefault("selected_profile", "Default")
+        if not isinstance(state.get("overlay_profiles"), dict):
+            state["overlay_profiles"] = {}
         profiles = state["profiles"]
         if (not isinstance(profiles, dict) or not 1 <= len(profiles) <= 64
                 or not isinstance(state["selected_profile"], str)
@@ -218,13 +220,15 @@ class Backend:
         mods = self.lib.mods(library)
         requirements = dependency_issues(library, mods)
         tables = self.resource_tables()
+        blocked = self.blocked()
+        applied_profile = self.profile_for_overlay(overlay) if count and not blocked else None
         return {
             "ok": ok, "message": message, "version": self.install.display_version,
             "game_name": self.game.name,
             "can_make_demos": self.version == "botw160",
             "game_running": game_running(self.slot, self.game), "pending": self.pending(overlay, count, tables),
             "profiles": list(library.state["profiles"]), "selected_profile": library.state["selected_profile"],
-            "applied_files": count, "blocked_reason": self.blocked(),
+            "applied_files": count, "applied_profile": applied_profile, "blocked_reason": blocked,
             "backup": self.latest_backup(),
             "dependency_blocker": self.dependency_blocker(mods, requirements),
             "merged_paths": [mod_rstb.RESOURCE.as_posix()] if tables else [],
@@ -242,6 +246,10 @@ class Backend:
             ],
             **extra,
         }
+
+    def profile_for_overlay(self, signature):
+        name = self.library.state["overlay_profiles"].get(signature)
+        return name if isinstance(name, str) and valid_profile_name(name) else None
 
     def dependency_blocker(self, mods=None, issues=None):
         mods = self.lib.mods(self.library) if mods is None else mods
@@ -292,13 +300,31 @@ class Backend:
     def latest_backup(self):
         if not self.load.parent.is_dir() or self.load.parent.is_symlink():
             return None
-        pattern = re.compile(re.escape(self.version) + r"\.backup-(\d{8}-\d{6})(?:-(\d+))?\Z")
         candidates = []
         for folder in self.load.parent.iterdir():
-            match = pattern.fullmatch(folder.name)
-            if match and folder.is_dir() and not folder.is_symlink() and regular(folder / "manifest.tsv"):
-                candidates.append((match[1], int(match[2] or 1), folder.name))
+            order = self.backup_order(folder.name)
+            if order and folder.is_dir() and not folder.is_symlink() and regular(folder / "manifest.tsv"):
+                candidates.append((*order, folder.name))
         return max(candidates)[2] if candidates else None
+
+    def backup_order(self, name):
+        match = re.fullmatch(re.escape(self.version) + r"\.backup-(\d{8}-\d{6})(?:-(\d+))?", name)
+        return (match[1], int(match[2] or 1)) if match else None
+
+    def backup_destination(self):
+        candidate = self.folder.backup_name(self.load)
+        latest = self.latest_backup()
+        if latest:
+            stamp, sequence = self.backup_order(latest)
+            if self.backup_order(candidate.name) <= (stamp, sequence):
+                # The helper can reuse a gap left by a restore in the same second.
+                # Keep the newest backup ordered after the remaining ones.
+                while True:
+                    sequence += 1
+                    candidate = self.load.with_name(f"{self.version}.backup-{stamp}-{sequence}")
+                    if not present(candidate):
+                        break
+        return candidate
 
     def with_closed_game(self, operation):
         ensure_dir(self.load.parent)
@@ -325,7 +351,7 @@ class Backend:
             source = self.load.with_name(expected_backup)
         previous = None
         if present(self.load):
-            previous = self.folder.backup_name(self.load)
+            previous = self.backup_destination()
             self.load.rename(previous)
         try:
             if source is not None:
@@ -371,8 +397,9 @@ class Backend:
             if native_game_running(self.game):
                 raise ModError(f"Quit {self.game.name} before applying mods.")
             previous_key, previous_failed = library.state["applied"], library.state["applied_failed"]
+            previous_profiles = library.state["overlay_profiles"]
             if before is not None:
-                backup = self.folder.backup_name(self.load)
+                backup = self.backup_destination()
                 self.load.rename(backup)
             installed = False
             try:
@@ -382,9 +409,15 @@ class Backend:
                 overlay, count = overlay_signature(self.load)
                 library.state["applied"] = self.applied_key(overlay, tables)
                 library.state["applied_failed"] = False
+                if count:
+                    # A signature survives moving an overlay to backup and restoring it.
+                    profiles = {key: name for key, name in previous_profiles.items() if key != overlay}
+                    profiles[overlay] = library.state["selected_profile"]
+                    library.state["overlay_profiles"] = dict(list(profiles.items())[-64:])
                 self.lib.save(library)
             except Exception:
                 library.state["applied"], library.state["applied_failed"] = previous_key, previous_failed
+                library.state["overlay_profiles"] = previous_profiles
                 if installed:
                     self.load.rename(staged)
                 if backup is not None and not present(self.load):
